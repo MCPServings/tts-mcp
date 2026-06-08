@@ -61,6 +61,17 @@ that is removed after synthesis.
 Copy `.env.example` to `.env` and set `TTS_BACKENDS` (JSON routing table),
 optional `TTS_API_KEY` / `TTS_RAPIDAPI_PROXY_SECRET`.
 
+### Gateway auth & rate limiting (REST `/v1/audio/speech`)
+
+The gateway front-door (`_check_auth`) is **open when neither `TTS_API_KEY` nor
+`TTS_RAPIDAPI_PROXY_SECRET` is set** ("dev mode" — any caller is allowed). Set
+`TTS_API_KEY` to require `Authorization: Bearer <key>`. Note the REST gateway
+itself has **no built-in rate limiting** (only an internal per-backend
+concurrency cap); when exposing it publicly in dev mode, put a rate limit at the
+reverse proxy. The production deploy (api.redqueen-serving.cloud) runs dev mode
++ an nginx `limit_req` on `location /tts/` (`tts_zone` 30 r/m, `burst=10
+nodelay`, `429` on overflow) as the DoS guard.
+
 ## MCP server (`mcp_server.py`)
 
 A Model Context Protocol front-end over the gateway, exposing TTS as MCP tools
