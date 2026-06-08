@@ -1,3 +1,5 @@
 fastapi
 uvicorn[standard]
 httpx
+mcp>=1.27
+anyio

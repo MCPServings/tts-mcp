@@ -59,3 +59,48 @@ that is removed after synthesis.
 
 Copy `.env.example` to `.env` and set `TTS_BACKENDS` (JSON routing table),
 optional `TTS_API_KEY` / `TTS_RAPIDAPI_PROXY_SECRET`.
+
+## MCP server (`mcp_server.py`)
+
+A Model Context Protocol front-end over the gateway, exposing TTS as MCP tools
+for agent clients (Claude Desktop, Cursor, VS Code, etc.).
+
+Tools: `list_models`, `list_voices`, `text_to_speech`, `clone_voice`.
+
+Transports (`TTS_MCP_TRANSPORT`):
+
+- `streamable-http` (default) — remote MCP over HTTP at `/mcp`, deploy behind
+  nginx. Live at `https://api.redqueen-serving.cloud/mcp`.
+- `stdio` — local spawn; configure in the client's `mcp.json`:
+
+  ```json
+  {
+    "mcpServers": {
+      "redqueen-tts": {
+        "command": "/path/to/venv/bin/python",
+        "args": ["/path/to/mcp_server.py"],
+        "env": { "TTS_MCP_TRANSPORT": "stdio",
+                 "TTS_MCP_GATEWAY": "https://api.redqueen-serving.cloud/tts" }
+      }
+    }
+  }
+  ```
+
+### Rate limiting (streamable-http only)
+
+Per client IP (`X-Forwarded-For` when behind nginx), enforced in-app:
+
+- synthesis tools (`text_to_speech`, `clone_voice`): `TTS_MCP_RL_SYNTH`/min (default 15)
+- read-only tools (`list_models`, `list_voices`): coarse HTTP cap `TTS_MCP_RL_READ`/min (default 60)
+- global synthesis concurrency cap: `TTS_MCP_MAX_CONCURRENCY` (default 4), protecting the single-GPU backend.
+
+`429` is returned at the HTTP layer for abusive request rates; synthesis tools
+return an MCP error when the per-IP synth budget is exceeded. The stdio
+transport is unmetered (single trusted caller).
+
+### Host allowlist
+
+MCP's DNS-rebinding protection requires the served Host to be allowlisted via
+`TTS_MCP_ALLOWED_HOSTS` (comma-separated; include the public domain when behind
+nginx, or `*` to disable the check).
+
