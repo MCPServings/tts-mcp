@@ -284,7 +284,7 @@ async def text_to_speech(
     Args:
         text: the text to speak.
         model: TTS model id (see list_models), e.g. kokoro, melotts,
-            qwen3-tts-1.7b, cosyvoice3.
+            qwen3-tts-1.7b, cosyvoice3, indextts2, chatterbox.
         voice: voice id; omit to use the model's default.
         response_format: mp3 (default), wav, opus, aac, flac, or pcm.
         speed: speaking rate multiplier (1.0 = normal).
@@ -317,17 +317,19 @@ async def clone_voice(
 ) -> AudioContent:
     """Synthesize speech in a cloned voice from a reference audio sample.
 
-    Supported by the CosyVoice models (cosyvoice3 / cosyvoice2). Provide the
-    reference voice either inline as base64 (``reference_audio_b64``) or as an
-    http(s) URL (``reference_audio_url``). Supplying ``reference_text`` (the
-    transcript of the reference clip) improves clone quality.
+    Supported by the voice-clone models: cosyvoice3 / cosyvoice2 (zh/en,
+    multilingual), indextts2 (zh/en, also supports emotion control), and
+    chatterbox (English). Provide the reference voice either inline as base64
+    (``reference_audio_b64``) or as an http(s) URL (``reference_audio_url``).
+    Supplying ``reference_text`` (the transcript of the reference clip)
+    improves clone quality.
 
     Args:
         text: the text to speak in the cloned voice.
         reference_audio_b64: base64-encoded reference audio (wav/mp3/flac/...).
         reference_audio_url: http(s) URL to the reference audio.
         reference_text: transcript of the reference audio (recommended).
-        model: cosyvoice3 (default) or cosyvoice2.
+        model: cosyvoice3 (default), cosyvoice2, indextts2, or chatterbox.
         response_format: wav (default), flac, or mp3.
         speed: speaking rate multiplier.
 
