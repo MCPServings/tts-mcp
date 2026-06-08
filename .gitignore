@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+pydeps/
+
+# Secrets / runtime config (only .env.example is tracked)
+.env
+*.env
+!.env.example
+
+# Logs / runtime
+*.log
+.ready
+
+# Model weights & audio artifacts (never commit)
+models/
+hf/
+*.wav
+*.mp3
+*.flac
+*.ogg
+*.onnx
+*.bin
+*.pth
+*.pt
+*.safetensors
