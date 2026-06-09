@@ -24,8 +24,10 @@ Auth: optional bearer key (TTS_API_KEY) and/or RapidAPI proxy secret
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
+import shutil
 import time
 from typing import Any
 
@@ -78,6 +80,48 @@ _CONTENT_TYPES = {
     "wav": "audio/wav",
     "pcm": "audio/L16",
 }
+
+# Formats we transcode to with ffmpeg when the backend can't emit them itself
+# (our raw backends return WAV). ffmpeg args per target container/codec.
+FFMPEG_BIN = os.environ.get("TTS_FFMPEG", shutil.which("ffmpeg") or "ffmpeg")
+TRANSCODE_ENABLED = os.environ.get("TTS_TRANSCODE", "1") == "1"
+_FFMPEG_ARGS: dict[str, list[str]] = {
+    "mp3": ["-f", "mp3", "-codec:a", "libmp3lame", "-q:a", "2"],
+    "opus": ["-f", "ogg", "-codec:a", "libopus", "-b:a", "64k"],
+    "aac": ["-f", "adts", "-codec:a", "aac", "-b:a", "128k"],
+    "flac": ["-f", "flac"],
+}
+_FFMPEG_CT = {
+    "mp3": "audio/mpeg",
+    "opus": "audio/ogg",
+    "aac": "audio/aac",
+    "flac": "audio/flac",
+}
+
+
+async def _transcode(audio: bytes, fmt: str) -> tuple[bytes, str] | None:
+    """Transcode raw audio bytes to ``fmt`` via ffmpeg (reads stdin -> stdout).
+
+    Returns (bytes, content_type) on success, or None to fall back to passthrough.
+    """
+    args = _FFMPEG_ARGS.get(fmt)
+    if not args or not TRANSCODE_ENABLED:
+        return None
+    cmd = [FFMPEG_BIN, "-hide_banner", "-loglevel", "error", "-i", "pipe:0", *args, "pipe:1"]
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        out, err = await asyncio.wait_for(proc.communicate(input=audio), timeout=60)
+    except Exception:  # noqa: BLE001 - any ffmpeg failure -> passthrough
+        return None
+    if proc.returncode != 0 or not out:
+        return None
+    return out, _FFMPEG_CT.get(fmt, "application/octet-stream")
+
 
 app = FastAPI(title="RedQueen TTS API", version="0.1.0")
 
@@ -216,9 +260,20 @@ async def speech(
         detail = r.text[:300]
         raise HTTPException(status_code=502, detail=f"backend '{model}' error {r.status_code}: {detail}")
 
-    out_ct = r.headers.get("content-type", content_type)
+    audio = r.content
+    backend_ct = r.headers.get("content-type", "")
+    out_ct = backend_ct or content_type
+
+    # Transcode to the requested format when the backend didn't already emit it.
+    # Our raw backends return WAV; honor response_format=mp3/opus/aac/flac.
+    want = _FFMPEG_CT.get(fmt)
+    if want and want not in backend_ct.lower():
+        result = await _transcode(audio, fmt)
+        if result is not None:
+            audio, out_ct = result
+
     headers = {
         "X-TTS-Model": model,
         "X-TTS-Latency-ms": str(round((time.time() - t0) * 1000, 1)),
     }
-    return Response(content=r.content, media_type=out_ct, headers=headers)
+    return Response(content=audio, media_type=out_ct, headers=headers)
