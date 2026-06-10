@@ -1,0 +1,18 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.MCPServings/tts-mcp",
+  "title": "TTS MCP",
+  "description": "Text-to-speech and voice cloning MCP server.",
+  "repository": {
+    "url": "https://github.com/MCPServings/tts-mcp",
+    "source": "github"
+  },
+  "version": "1.27.2",
+  "websiteUrl": "https://ttskits.online",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://ttskits.online/mcp"
+    }
+  ]
+}

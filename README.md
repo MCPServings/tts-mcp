@@ -82,7 +82,7 @@ Tools: `list_models`, `list_voices`, `text_to_speech`, `clone_voice`.
 Transports (`TTS_MCP_TRANSPORT`):
 
 - `streamable-http` (default) — remote MCP over HTTP at `/mcp`, deploy behind
-  nginx. Live at `https://api.redqueen-serving.cloud/mcp`.
+  nginx. Live at `https://ttskits.online/mcp`.
 - `stdio` — local spawn; configure in the client's `mcp.json`:
 
   ```json
