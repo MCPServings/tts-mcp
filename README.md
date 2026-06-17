@@ -116,3 +116,9 @@ MCP's DNS-rebinding protection requires the served Host to be allowlisted via
 `TTS_MCP_ALLOWED_HOSTS` (comma-separated; include the public domain when behind
 nginx, or `*` to disable the check).
 
+---
+
+## License
+
+MIT © MCPServings. See [LICENSE](LICENSE).
+
