@@ -25,6 +25,7 @@ Auth: optional bearer key (TTS_API_KEY) and/or RapidAPI proxy secret
 from __future__ import annotations
 
 import asyncio
+import hmac
 import json
 import os
 import shutil
@@ -68,6 +69,7 @@ except json.JSONDecodeError as exc:  # pragma: no cover - config error
 
 API_KEY = os.environ.get("TTS_API_KEY", "")
 RAPIDAPI_PROXY_SECRET = os.environ.get("TTS_RAPIDAPI_PROXY_SECRET", "")
+CLONE_TOKEN = os.environ.get("TTS_CLONE_TOKEN", "")
 REQUEST_TIMEOUT = float(os.environ.get("TTS_TIMEOUT", "120"))
 PUBLIC_NAME = os.environ.get("TTS_PUBLIC_NAME", "redqueen-tts")
 
@@ -145,6 +147,19 @@ def _check_auth(authorization: str, proxy_secret: str) -> None:
     raise HTTPException(status_code=401, detail="unauthorized")
 
 
+def _check_clone_auth(body: dict[str, Any], clone_token: str) -> None:
+    clone_requested = any(body.get(field) for field in (
+        "reference_audio", "reference_audio_b64", "reference_audio_url"
+    ))
+    if not clone_requested:
+        return
+    if not CLONE_TOKEN or not clone_token or not hmac.compare_digest(clone_token, CLONE_TOKEN):
+        raise HTTPException(
+            status_code=403,
+            detail="Voice cloning requires an authenticated TTSKits account or personal API key.",
+        )
+
+
 def _resolve_backend(model: str) -> tuple[str, dict[str, Any]]:
     backend = TTS_BACKENDS.get(model)
     if backend is None:
@@ -203,6 +218,7 @@ async def speech(
     request: Request,
     authorization: str = Header(default=""),
     x_rapidapi_proxy_secret: str = Header(default=""),
+    x_tts_clone_token: str = Header(default=""),
 ) -> Response:
     _check_auth(authorization, x_rapidapi_proxy_secret)
 
@@ -210,6 +226,8 @@ async def speech(
         body = await request.json()
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f"invalid json body: {exc}")
+
+    _check_clone_auth(body, x_tts_clone_token)
 
     model = body.get("model")
     if not model:

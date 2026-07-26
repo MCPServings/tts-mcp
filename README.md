@@ -46,7 +46,10 @@ Voice cloning is supported by the `cosyvoice2` / `cosyvoice3` (multilingual),
 `indextts2` (multilingual, plus emotion control) and `chatterbox` (English)
 backends: pass `reference_audio_b64` or `reference_audio_url` plus
 `reference_text`. Inline reference audio is decoded into a short-lived temp wav
-that is removed after synthesis.
+that is removed after synthesis. Requests containing reference audio also need
+the internal `X-TTS-Clone-Token` header configured by `TTS_CLONE_TOKEN`; this
+token is reserved for an account-aware frontend and must not be exposed to
+public clients.
 
 ## Backend kinds
 
@@ -59,7 +62,8 @@ that is removed after synthesis.
 ## Config
 
 Copy `.env.example` to `.env` and set `TTS_BACKENDS` (JSON routing table),
-optional `TTS_API_KEY` / `TTS_RAPIDAPI_PROXY_SECRET`.
+optional `TTS_API_KEY` / `TTS_RAPIDAPI_PROXY_SECRET`, and a random
+`TTS_CLONE_TOKEN` when voice cloning is enabled.
 
 ### Gateway auth & rate limiting (REST `/v1/audio/speech`)
 
@@ -77,7 +81,8 @@ nodelay`, `429` on overflow) as the DoS guard.
 A Model Context Protocol front-end over the gateway, exposing TTS as MCP tools
 for agent clients (Claude Desktop, Cursor, VS Code, etc.).
 
-Tools: `list_models`, `list_voices`, `text_to_speech`, `clone_voice`.
+Tools: `list_models`, `list_voices`, `text_to_speech`. Voice cloning is not
+exposed by the anonymous MCP endpoint.
 
 Transports (`TTS_MCP_TRANSPORT`):
 
@@ -102,7 +107,7 @@ Transports (`TTS_MCP_TRANSPORT`):
 
 Per client IP (`X-Forwarded-For` when behind nginx), enforced in-app:
 
-- synthesis tools (`text_to_speech`, `clone_voice`): `TTS_MCP_RL_SYNTH`/min (default 15)
+- synthesis tool (`text_to_speech`): `TTS_MCP_RL_SYNTH`/min (default 15)
 - read-only tools (`list_models`, `list_voices`): coarse HTTP cap `TTS_MCP_RL_READ`/min (default 60)
 - global synthesis concurrency cap: `TTS_MCP_MAX_CONCURRENCY` (default 4), protecting the single-GPU backend.
 

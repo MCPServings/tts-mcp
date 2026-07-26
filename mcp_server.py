@@ -2,7 +2,7 @@
 
 A thin Model Context Protocol front-end over the existing OpenAI-compatible TTS
 gateway (``app.py`` on the same host, ``TTS_MCP_GATEWAY`` URL). It exposes the
-TTS catalogue and synthesis (incl. CosyVoice voice cloning) as MCP tools.
+TTS catalogue and built-in-voice synthesis as MCP tools.
 
 Transports (``TTS_MCP_TRANSPORT``):
   * ``streamable-http`` (default) — remote MCP over HTTP at ``/mcp``; deploy
@@ -11,7 +11,7 @@ Transports (``TTS_MCP_TRANSPORT``):
     (single trusted caller).
 
 Rate limiting (per client IP, streamable-http only; all token-bucket per minute):
-  * synthesis tools (text_to_speech, clone_voice): TTS_MCP_RL_SYNTH (default 15)
+    * synthesis tool (text_to_speech): TTS_MCP_RL_SYNTH (default 15)
   * read-only tools (list_models, list_voices):     TTS_MCP_RL_READ  (default 60)
   * a global concurrency semaphore caps simultaneous synthesis to protect the
     single-GPU backend: TTS_MCP_MAX_CONCURRENCY (default 4).
@@ -68,10 +68,9 @@ else:
 mcp = FastMCP(
     "redqueen-tts",
     instructions=(
-        "Text-to-speech with multiple engines and voice cloning. Use "
-        "list_models to discover voices/languages, text_to_speech to synthesize "
-        "with a built-in voice, and clone_voice (CosyVoice) to synthesize in a "
-        "cloned voice from a reference audio sample."
+        "Text-to-speech with multiple engines and built-in voices. Use "
+        "list_models to discover voices/languages and text_to_speech to "
+        "synthesize with a built-in voice."
     ),
     host=HOST,
     port=PORT,
@@ -238,16 +237,15 @@ async def list_models() -> str:
     """List available TTS models with their languages and default voice.
 
     Returns a human-readable catalogue. Use the model ``id`` values with
-    ``text_to_speech`` / ``clone_voice``.
+    ``text_to_speech``.
     """
     data = await _gateway_get("/v1/models")
     lines = ["Available TTS models:"]
     for m in data.get("data", []):
         langs = ",".join(m.get("languages", []) or [])
-        clone = " [voice-clone]" if "clone" in (m.get("note", "").lower()) else ""
         dv = m.get("default_voice")
         dv_s = f" default_voice={dv}" if dv else ""
-        lines.append(f"  - {m['id']}{clone}: langs=[{langs}]{dv_s} — {m.get('note','')}")
+        lines.append(f"  - {m['id']}: langs=[{langs}]{dv_s} — {m.get('note','')}")
     return "\n".join(lines)
 
 
@@ -301,53 +299,6 @@ async def text_to_speech(
         payload["voice"] = voice
     if language:
         payload["language"] = language
-    return await _synthesize(payload, fmt)
-
-
-@mcp.tool()
-async def clone_voice(
-    text: str,
-    reference_audio_b64: str | None = None,
-    reference_audio_url: str | None = None,
-    reference_text: str | None = None,
-    model: str = "cosyvoice3",
-    response_format: str = "wav",
-    speed: float = 1.0,
-    ctx: Context = None,
-) -> AudioContent:
-    """Synthesize speech in a cloned voice from a reference audio sample.
-
-    Supported by the voice-clone models: cosyvoice3 / cosyvoice2 (zh/en,
-    multilingual), indextts2 (zh/en, also supports emotion control), and
-    chatterbox (English). Provide the reference voice either inline as base64
-    (``reference_audio_b64``) or as an http(s) URL (``reference_audio_url``).
-    Supplying ``reference_text`` (the transcript of the reference clip)
-    improves clone quality.
-
-    Args:
-        text: the text to speak in the cloned voice.
-        reference_audio_b64: base64-encoded reference audio (wav/mp3/flac/...).
-        reference_audio_url: http(s) URL to the reference audio.
-        reference_text: transcript of the reference audio (recommended).
-        model: cosyvoice3 (default), cosyvoice2, indextts2, or chatterbox.
-        response_format: wav (default), flac, or mp3.
-        speed: speaking rate multiplier.
-
-    Returns the synthesized audio in the cloned voice.
-    """
-    if not text or not text.strip():
-        raise ValueError("text must not be empty")
-    if not reference_audio_b64 and not reference_audio_url:
-        raise ValueError("provide reference_audio_b64 or reference_audio_url")
-    _check_synth_rl(ctx)
-    fmt = (response_format or "wav").lower()
-    payload: dict = {"model": model, "input": text, "response_format": fmt, "speed": speed}
-    if reference_audio_b64:
-        payload["reference_audio_b64"] = reference_audio_b64
-    if reference_audio_url:
-        payload["reference_audio_url"] = reference_audio_url
-    if reference_text:
-        payload["reference_text"] = reference_text
     return await _synthesize(payload, fmt)
 
 
