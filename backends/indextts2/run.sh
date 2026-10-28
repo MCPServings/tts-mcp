@@ -35,7 +35,7 @@ if [ ! -f /work/.ready ]; then
   fi
 
   mkdir -p "$PYD"
-  # retry wrapper: halo-office egress occasionally corrupts large pip downloads (hash mismatch).
+  # retry wrapper: the GPU host's egress occasionally corrupts large pip downloads (hash mismatch).
   pipretry() {
     local log=$1; shift
     local n=0

@@ -20,7 +20,7 @@ if [ ! -f /work/.ready ]; then
   apt-get install -y --no-install-recommends git build-essential >>/tmp/apt.log 2>&1
 
   mkdir -p "$PYD"
-  # retry wrapper: the halo-office egress occasionally corrupts large pip downloads
+  # retry wrapper: the GPU host's egress occasionally corrupts large pip downloads
   # (hash mismatch). --no-cache-dir avoids reusing a corrupt cached file; retry a few times.
   pipretry() {
     local log=$1; shift

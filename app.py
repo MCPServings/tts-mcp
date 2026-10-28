@@ -2,7 +2,7 @@
 
 A thin, OpenAI-compatible text-to-speech front-door. It runs no model locally;
 it routes each request to one of several TTS engines reached over reverse SSH
-tunnels to a GPU host (halo-office, Strix Halo gfx1151).
+tunnels to a GPU host (Strix Halo gfx1151).
 
 Public surface (OpenAI-compatible):
   GET  /health                 -> liveness + per-backend probe
