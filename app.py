@@ -45,6 +45,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 #   kind             "openai" | "raw"
 #   upstream_model   model name to send to the backend (openai kind); optional
 #   path             endpoint path for "raw" kind (default /tts)
+#   health_path      health probe path (default /health)
 #   voices           optional list of advertised voice ids
 #   default_voice    optional default voice
 #   languages        optional list of language codes (advertised)
@@ -83,6 +84,15 @@ _CONTENT_TYPES = {
     "pcm": "audio/L16",
 }
 
+# Upstream statuses that describe the caller's request, not a backend fault.
+_PASSTHROUGH_STATUSES = {400, 404, 405, 409, 413, 415, 422, 429}
+
+# Backends disagree on where they publish their voice catalog; probe in order.
+VOICES_TIMEOUT = float(os.environ.get("TTS_VOICES_TIMEOUT", "5"))
+VOICES_TTL = float(os.environ.get("TTS_VOICES_TTL", "300"))
+_VOICES_PATHS = ("/voices", "/v1/audio/voices", "/v1/voices")
+_voices_cache: dict[str, tuple[float, list[str]]] = {}
+
 # Formats we transcode to with ffmpeg when the backend can't emit them itself
 # (our raw backends return WAV). ffmpeg args per target container/codec.
 FFMPEG_BIN = os.environ.get("TTS_FFMPEG", shutil.which("ffmpeg") or "ffmpeg")
@@ -104,7 +114,9 @@ _FFMPEG_CT = {
 async def _transcode(audio: bytes, fmt: str) -> tuple[bytes, str] | None:
     """Transcode raw audio bytes to ``fmt`` via ffmpeg (reads stdin -> stdout).
 
-    Returns (bytes, content_type) on success, or None to fall back to passthrough.
+    Returns (bytes, content_type) on success, or None when transcoding is
+    unavailable. Callers must preserve the backend's real content type on
+    failure rather than claiming the requested format.
     """
     args = _FFMPEG_ARGS.get(fmt)
     if not args or not TRANSCODE_ENABLED:
@@ -123,6 +135,57 @@ async def _transcode(audio: bytes, fmt: str) -> tuple[bytes, str] | None:
     if proc.returncode != 0 or not out:
         return None
     return out, _FFMPEG_CT.get(fmt, "application/octet-stream")
+
+
+def _extract_voices(data: Any) -> list[str]:
+    """Pull a flat voice-id list out of the shapes our backends actually use.
+
+    Zero-shot / cloning backends (cosyvoice3, indextts2) legitimately have no
+    named catalog and yield an empty list; their default voice is advertised
+    through /v1/models instead.
+    """
+    if isinstance(data, dict):
+        for key in ("voices", "speakers", "data", "results"):
+            if key in data:
+                return _extract_voices(data[key])
+        return []
+    if not isinstance(data, list):
+        return []
+    out: list[str] = []
+    for item in data:
+        if isinstance(item, str):
+            out.append(item)
+        elif isinstance(item, dict):
+            name = item.get("id") or item.get("name") or item.get("voice")
+            if isinstance(name, str):
+                out.append(name)
+    return out
+
+
+async def _probe_voices(client: httpx.AsyncClient, model: str, be: dict[str, Any]) -> list[str]:
+    """Ask a backend for its voice catalog, cached; empty list when it has none."""
+    now = time.time()
+    cached = _voices_cache.get(model)
+    if cached and now - cached[0] < VOICES_TTL:
+        return cached[1]
+    base = be["url"].rstrip("/")
+    paths = [be["voices_path"]] if be.get("voices_path") else list(_VOICES_PATHS)
+    voices: list[str] = []
+    for path in paths:
+        try:
+            r = await client.get(base + path)
+        except Exception:  # noqa: BLE001 - unreachable backend -> no catalog
+            continue
+        if r.status_code != 200:
+            continue
+        try:
+            voices = _extract_voices(r.json())
+        except ValueError:
+            continue
+        if voices:
+            break
+    _voices_cache[model] = (now, voices)
+    return voices
 
 
 app = FastAPI(title="RedQueen TTS API", version="0.1.0")
@@ -178,7 +241,7 @@ async def health() -> JSONResponse:
     results: dict[str, Any] = {}
     async with httpx.AsyncClient(timeout=8.0) as client:
         for model, be in TTS_BACKENDS.items():
-            url = be["url"].rstrip("/") + "/health"
+            url = be["url"].rstrip("/") + be.get("health_path", "/health")
             try:
                 r = await client.get(url)
                 results[model] = {"ok": r.status_code < 500, "status": r.status_code}
@@ -208,8 +271,10 @@ async def list_models() -> dict[str, Any]:
 @app.get("/v1/audio/voices")
 async def list_voices() -> dict[str, Any]:
     out: dict[str, Any] = {}
-    for model, be in TTS_BACKENDS.items():
-        out[model] = be.get("voices", [])
+    async with httpx.AsyncClient(timeout=VOICES_TIMEOUT) as client:
+        for model, be in TTS_BACKENDS.items():
+            configured = list(be.get("voices") or [])
+            out[model] = configured or await _probe_voices(client, model, be)
     return {"object": "list", "voices": out}
 
 
@@ -276,7 +341,12 @@ async def speech(
 
     if r.status_code >= 400:
         detail = r.text[:300]
-        raise HTTPException(status_code=502, detail=f"backend '{model}' error {r.status_code}: {detail}")
+        # An upstream 4xx means the caller's request was wrong (kokoro, for
+        # one, rejects unknown voice ids). Reporting that as 502 makes clients
+        # retry and monitoring page a backend that is perfectly healthy.
+        # Upstream 401/403 is our own credential problem, so it stays 502.
+        status = r.status_code if r.status_code in _PASSTHROUGH_STATUSES else 502
+        raise HTTPException(status_code=status, detail=f"backend '{model}' error {r.status_code}: {detail}")
 
     audio = r.content
     backend_ct = r.headers.get("content-type", "")
