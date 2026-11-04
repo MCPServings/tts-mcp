@@ -28,6 +28,9 @@ import os
 from huggingface_hub import snapshot_download
 snapshot_download(os.environ.get("QWEN_TTS_MODEL", "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"))
 snapshot_download("Qwen/Qwen3-TTS-Tokenizer-12Hz")
+base = os.environ.get("QWEN_TTS_BASE_MODEL", "Qwen/Qwen3-TTS-12Hz-1.7B-Base")
+if base:
+    snapshot_download(base)
 PY
   rc=$?
   if [ $rc -ne 0 ]; then

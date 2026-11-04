@@ -281,8 +281,8 @@ async def text_to_speech(
 
     Args:
         text: the text to speak.
-        model: TTS model id (see list_models), e.g. kokoro, melotts,
-            qwen3-tts-1.7b, cosyvoice3, indextts2, chatterbox.
+        model: TTS model id (see list_models), e.g. kokoro,
+            qwen3-tts-1.7b, cosyvoice3, indextts2, audio8.
         voice: voice id; omit to use the model's default.
         response_format: mp3 (default), wav, opus, aac, flac, or pcm.
         speed: speaking rate multiplier (1.0 = normal).

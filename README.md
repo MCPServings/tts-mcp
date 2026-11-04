@@ -16,7 +16,7 @@ backends/<model>/
 requirements.txt        # gateway deps
 ```
 
-Models: `kokoro` `melotts` `qwen3tts` `cosyvoice` `indextts2` `chatterbox` `orpheus` `dia`.
+Models: `kokoro` `qwen3tts` `cosyvoice` `indextts2` (IndexTTS-2.5).
 
 ## Gateway API (OpenAI-compatible)
 
@@ -43,9 +43,9 @@ POST /v1/audio/speech   # synthesize; routes by `model`
 | `instructions` | no | style/instruction prompt |
 
 Voice cloning is supported by the `cosyvoice2` / `cosyvoice3` (multilingual),
-`indextts2` (multilingual, plus emotion control) and `chatterbox` (English)
-backends: pass `reference_audio_b64` or `reference_audio_url` plus
-`reference_text`. Inline reference audio is decoded into a short-lived temp wav
+`qwen3-tts-*` (multilingual; served by the Qwen3-TTS Base checkpoint) and
+`indextts2` (IndexTTS-2.5, multilingual) backends: pass `reference_audio_b64` or
+`reference_audio_url`, plus `reference_text` for best quality. Inline reference audio is decoded into a short-lived temp wav
 that is removed after synthesis. Requests containing reference audio also need
 the internal `X-TTS-Clone-Token` header configured by `TTS_CLONE_TOKEN`; this
 token is reserved for an account-aware frontend and must not be exposed to
