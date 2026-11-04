@@ -87,7 +87,8 @@ exposed by the anonymous MCP endpoint.
 Transports (`TTS_MCP_TRANSPORT`):
 
 - `streamable-http` (default) — remote MCP over HTTP at `/mcp`, deploy behind
-  nginx. Live at `https://ttskits.online/mcp`.
+  nginx. The hosted endpoint `https://ttskits.online/mcp` was retired on
+  2026-11-04; self-host it or use `stdio`.
 - `stdio` — local spawn; configure in the client's `mcp.json`:
 
   ```json
