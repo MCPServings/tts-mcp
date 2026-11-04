@@ -70,11 +70,10 @@ optional `TTS_API_KEY` / `TTS_RAPIDAPI_PROXY_SECRET`, and a random
 The gateway front-door (`_check_auth`) is **open when neither `TTS_API_KEY` nor
 `TTS_RAPIDAPI_PROXY_SECRET` is set** ("dev mode" — any caller is allowed). Set
 `TTS_API_KEY` to require `Authorization: Bearer <key>`. Note the REST gateway
-itself has **no built-in rate limiting** (only an internal per-backend
-concurrency cap); when exposing it publicly in dev mode, put a rate limit at the
-reverse proxy. The production deploy (api.redqueen-serving.cloud) runs dev mode
-+ an nginx `limit_req` on `location /tts/` (`tts_zone` 30 r/m, `burst=10
-nodelay`, `429` on overflow) as the DoS guard.
+itself has **no built-in rate limiting, concurrency cap or input length limit**;
+when exposing it publicly in dev mode, put limits at the reverse proxy. The
+former public deploy (`redqueen-serving.cloud/tts/`, nginx `limit_req` 30 r/m,
+`burst=10`) was retired on 2026-11-04; there is no hosted public gateway.
 
 ## MCP server (`mcp_server.py`)
 
@@ -98,7 +97,7 @@ Transports (`TTS_MCP_TRANSPORT`):
         "command": "/path/to/venv/bin/python",
         "args": ["/path/to/mcp_server.py"],
         "env": { "TTS_MCP_TRANSPORT": "stdio",
-                 "TTS_MCP_GATEWAY": "https://api.redqueen-serving.cloud/tts" }
+                 "TTS_MCP_GATEWAY": "http://127.0.0.1:18821" }
       }
     }
   }
